@@ -1,0 +1,33 @@
+ *,html,body {
+    padding:0;
+    margin:0;
+    font-family: 'Orgon Slab';
+  }
+
+  #dashboard {
+    z-index: 2;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  #dashboard * {
+    z-index: inherit;
+    text-align: center;
+  }
+
+  #dashboard div {
+    margin-top: 1rem;
+  }
+
+  #dashboard button {
+    padding: 0.5rem;
+    margin-left: 0.5rem;
+  }
+
+  canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+  }

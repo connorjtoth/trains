@@ -1,0 +1,458 @@
+<html>
+<head>
+<title>Train Simulator</title>
+
+<!--
+1. Generate random stations
+	//rules
+	//no fewer than 3 stations
+	//no more than 8 stations
+	//no station can be within 8 blocks of another station
+2. Generate random pathways to those stations
+3. Generate random number of junctions that switch
+3. Generate random number of trains
+4. Enjoy -->
+
+
+<!--
+The game is about keeping the trains on schedule without a wreck!
+Trains are represented by Blocks
+Train speeds can be manipulated from min-max
+Junctions can be changed to go one way or the other
+Anyone can claim control of any train, but only one person can have a train at a time
+-->
+
+<style>
+*,html,body {
+	padding:0;
+	margin:0;
+}
+</style>
+
+<!-- Voronoi.JS provides library for creating voronoi diagrams -->
+<script src="voronoi.js"></script>
+
+
+</head>
+<body>
+<canvas id="main_canvas"></canvas>
+</body>
+<script src="vector2.js"></script>
+<script src="canvas.js"></script>
+<script src="calc.js"></script>
+<script src="game.js"></script>
+<script src="path.js"></script>
+
+
+<script>
+
+createText(cxt, '', 'Initializing Map...', '', CENTER_X, CENTER_Y, '#000');
+
+var gameMap = new Map();
+gameMap.initialize();
+
+var diagram = gameMap.diagram;
+var verts = gameMap.adjList.verts;
+var adjacent = gameMap.adjList.adjacent;
+var stations = gameMap.stations;
+var junctions = gameMap.junctions;
+
+
+
+gameMap.render();
+// {data: {x,y}, adjacent: [indices of neighbors]}
+// convert into a more manageable format (i hate the library's)
+
+
+
+function bfs (V, A, s, t)
+{
+	var parent = {};
+	var queue = [s];
+	var hits = [s];
+
+	while (queue.length > 0)
+	{
+		let current = queue.shift();
+		if (current == t)
+		{
+			return parent;
+		}
+		for (node of A[current])
+		{
+			var flag = false;
+			for (hit = 0; hit < hits.length; hit++)
+			{
+				if (node == hits[hit])
+				{
+					flag = true;
+					break;
+				}
+			}
+			if (!flag)
+			{
+				hits.unshift(node);
+				parent[node] = current;
+				queue.push(node);
+			}
+		}
+	}
+  throw 'breadth first search error, no connection to s and t';
+}
+
+
+function bfs_path(V, A, a, b)
+{
+	var path = new Path(a,b, gameMap);
+  path.loadFromParentMap( bfs(V, A, a, b) );
+	return path;
+}
+
+
+function getPath(a, b)
+{
+  return bfs_path(verts, adjacent, a, b);
+}
+
+function createPathBetweenVertices(a, b)
+{
+	var pathBFS = getPath(a, b);
+	console.log(pathBFS);
+	parentBFS = pathBFS.parent;
+	var runner = b;
+	while (runner != a)
+	{
+		var temp = parentBFS[runner];
+		var v1 = verts[temp];
+		var v2 = verts[runner];
+
+		//console.log(temp, runner, v1, v2);
+		draw_cxn(cxt, v1, v2);
+
+		runner = parentBFS[runner];
+	}
+
+	return parentBFS;
+}
+
+
+function drawPath(path)
+{
+	var a = path.endpoints[0];
+	var b = path.endpoints[1];
+
+	parentBFS = path.parent;
+	var runner = b;
+	while (runner != a)
+	{
+		var temp = parentBFS[runner];
+		var v1 = verts[temp];
+		var v2 = verts[runner];
+
+		//console.log(temp, runner, v1, v2);
+		draw_cxnV2(cxt, v1, v2);
+
+		runner = parentBFS[runner];
+	}
+}
+
+
+var newPath = [];
+for (var i = 0; i < stations.length - 2; i++)
+{
+	newPath[i] = getPath(stations[i],stations[i+1]);
+	console.log(newPath[i]);
+}
+
+for (path of newPath)
+{
+	path.drawPath()
+}
+
+
+// now we tween
+// t: current time, b: begInnIng value, c: change In value, d: duration
+function tween(t, b, c, d)
+{
+	return c * ( t / d ) + b;
+}
+
+function tweenV2(t, b, c, d)
+{
+  var x = tween(t, b.x, c.x, d);
+  var y = tween(t, b.y, c.y, d);
+  return new Vector2(x,y);
+}
+
+
+	var lastInfo;
+function followEdge(v1, v2, callback)
+{
+	var RATE = 5;
+	var delta_x = v2.x - v1.x;
+	var delta_y = v2.y - v1.y;
+	var total_dist = dist(v2, v1);
+	var tween_div = Math.ceil(total_dist / RATE);
+
+	if (tween_div == 0) // bad math = bad time
+	{
+		return callback();
+	}
+
+	var i = 1;
+	var interval = window.setInterval( function ( ) {
+
+		if (lastInfo)
+		{
+			cxt.putImageData(lastInfo.data, lastInfo.bounds.xl, lastInfo.bounds.yt);
+			delete lastInfo;
+		}
+		var pos_x = tween(i, v1.x, delta_x, tween_div);
+		var pos_y = tween(i, v1.y, delta_y, tween_div);
+
+		lastInfo = getImageDataAbout(pos_x, pos_y, 20);
+
+		createCircle(cxt, pos_x, pos_y, 5, true);
+		
+		if (tween_div == i)
+		{
+			clearInterval(interval);
+			return callback();
+		}
+		else
+		{
+			i++;
+		}
+	}, 100);
+}
+
+
+
+
+function getImageDataAbout(x, y, r)
+{
+	var redrawBounds = {xl: x - r, xr: x + r, yt: y - r, yb: y + r};
+	for (val of ['xl','yt'])
+	{
+		redrawBounds[val] = Math.floor(redrawBounds[val]);
+		if (redrawBounds[val] < BOUNDING_BOX[val])
+			redrawBounds[val] = BOUNDING_BOX[val];
+	}
+	for (val of ['xr','yb'])
+	{
+		redrawBounds[val] = Math.ceil(redrawBounds[val]);
+		if (redrawBounds[val] > BOUNDING_BOX[val])
+			redrawBounds[val] = BOUNDING_BOX[val];
+	}
+	redrawBounds.xr -= redrawBounds.xl;// turn into a width
+	redrawBounds.yb -= redrawBounds.yt;// turn into a height
+
+	
+	var lastImageData = cxt.getImageData(redrawBounds.xl, redrawBounds.yt, redrawBounds.xr, redrawBounds.yb);
+	var lastBounds = redrawBounds;
+
+	return {data: lastImageData, bounds: lastBounds};
+}
+
+
+function pathRepeater(i, list)
+{
+	if (i < list.length - 1)
+	{
+		var v1 = verts[list[i]];
+		var v2 = verts[list[i+1]];
+		followEdge(v1, v2, function() {
+			pathRepeater(i+1, list); 
+		});
+	}
+}
+
+
+function followPath(path, i, callback)
+{
+	var runner = path.endpoints[1];
+
+	var path_inorder = [];
+	while (runner != path.endpoints[0])
+	{	
+		path_inorder.push(runner);
+		runner = path.parent[runner];
+	}
+	path_inorder.push(path.endpoints[0]);
+
+	pathRepeater(0, path_inorder);
+}
+
+///followPath(newPath[0]);
+
+
+function getPathLength(path)
+{
+	var counter = 0;
+	for (edge of path.edges)
+	{
+		counter += dist(verts[edge[0]],verts[edge[1]]);
+	}
+	return counter;
+}
+
+function getDirectionAtLength(path, length)
+{
+	var counter = 0;
+	var runner = path.endpoints[0];
+	var amt = dist(verts[runner], verts[path.child[runner]]);
+	while (counter + amt < length)
+	{
+		// if the new segment will not put us over our limit, we continue
+		counter += amt;
+		runner = path.child[runner];
+    	amt = dist(verts[runner], verts[path.child[runner]]);
+	}
+
+	var child = path.child[runner];
+	if (counter + amt == length)
+	{
+		return new Vector2(0,0);
+	}
+	else
+	{
+		var runnerVert = verts[runner];
+		var childVert = verts[child];
+
+		// get slope from child - runner
+		var delta = Vector2.from(childVert)
+		delta.minus(runnerVert).unit();
+
+		return delta;
+		
+	}
+
+}
+
+function getLocationAtLength(path, length)
+{
+	var counter = 0;
+	var runner = path.endpoints[0];
+	var amt = dist(verts[runner], verts[path.child[runner]]);
+	while (counter + amt < length)
+	{
+		// if the new segment will not put us over our limit, we continue
+		counter += amt;
+		runner = path.child[runner];
+    	amt = dist(verts[runner], verts[path.child[runner]]);
+	}
+
+	var child = path.child[runner];
+	if (counter + amt == length)
+	{
+		return verts[child];
+	}
+	else
+	{
+		var runnerVert = verts[runner];
+		var childVert = verts[child];
+
+		// get slope from child - runner
+		var delta = Vector2.from(childVert)
+		delta.minus(runnerVert);
+
+		var percent = (length - counter) / amt;
+
+		// get the proper percent through the total length of the slope
+		delta.times(percent);
+
+		// get appropriate offset from runnerVert
+		delta.add(runnerVert);
+
+		return delta;
+	}
+
+	
+}
+
+
+function drawTrain(path, dist, numCars)
+{
+	var SIZE_OF_TRAIN = 7;
+	var total_length = getPathLength(path);
+	var length = total_length * dist;
+	var carLocs = [];
+	for (var car = 0; car < numCars; car++)
+	{
+		var localLength = length - 20 * car;
+		if (localLength > 0 && localLength < total_length)
+			carLocs.push([getLocationAtLength(path, localLength),getDirectionAtLength(path, localLength)]);
+	}
+
+	for (loc of carLocs)
+	{
+		drawRectangleV2(cxt, loc[0], {x:SIZE_OF_TRAIN*2, y:SIZE_OF_TRAIN}, loc[1]);
+	}
+}
+
+
+function trainPath ( path, numCars, callback )
+{
+
+  // width between train cars
+  var CAR_OFFSET = 20;
+
+  // time to redraw frames
+  var TIME_BETWEEN_REDRAW = 100;
+
+  // speed at which the train is travelling in pixels/iteration
+  var speed = 5;
+  
+  // pixel length of the path to traverse
+  var pathLength = getPathLength(path);
+  
+  // pixel length of the train
+  var trainLength = CAR_OFFSET * numCars;
+
+  // iterations for a point-object to traverse the path
+	var pointIterations = Math.ceil( pathLength / speed );
+
+  // iterations for the last train car to complete traversal
+	var trainIterations = Math.ceil( (pathLength + trainLength ) / speed);
+
+  // accumulator tracking how many iterations have occured
+  var currentIteration = 1;
+
+  // if there is no distance to travel, do not even try rendering
+  // an image
+	if (pointIterations <= 0)
+	{
+		return callback();
+	}
+
+
+	var interval = window.setInterval( function ( ) {
+
+    // redraw the map and remove the train that is on the map now
+		gameMap.render();
+
+    // move the train to the next position (determined by percent of poinIterations completed)
+    // when percent is under 100, then the train is drawn along the path,
+    // when percent is 100, the train's lead car is drawn at the end of the path
+    // when percent is over 100, the train's tail is being drawn going into the end of the path
+		drawTrain(path, currentIteration/pointIterations, numCars);
+		
+    // if the train has not been completely enveloped by the endpoint, continue
+    // otherwise, we callback and stop
+		if (trainIterations == currentIteration)
+		{
+			clearInterval(interval);
+			return callback();
+		}
+		else
+		{
+			currentIteration++;
+		}
+	}, TIME_BETWEEN_REDRAW);
+}
+
+trainPath(newPath[0], 12);
+</script>
+
+
+</html>

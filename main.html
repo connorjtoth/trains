@@ -1,0 +1,45 @@
+<html>
+<head>
+<title>Train Simulator</title>
+
+<!--
+1. Generate random stations
+2. Generate random pathways to those stations
+3. Generate random number of junctions that switch
+3. Generate random number of trains
+4. Enjoy -->
+
+
+<!--
+The game is about keeping the trains on schedule without a wreck!
+Trains are represented by Blocks
+Train speeds can be manipulated from min-max
+Junctions can be changed to go one way or the other
+Anyone can claim control of any train, but only one person can have a train at a time
+-->
+
+<link rel="stylesheet" href="style.css">
+
+<!-- Voronoi.JS provides library for creating voronoi diagrams -->
+<script src="voronoi.js"></script>
+
+
+</head>
+<body>
+  
+  <canvas id="main_canvas"></canvas>
+  <div id="dashboard"></div>
+
+</body>
+
+<script src="vector2.js"></script>
+<script src="canvas.js"></script>
+<script src="calc.js"></script>
+<script src="game.js"></script>
+<script src="path.js"></script>
+<script src="train.js"></script>
+<script src="control.js"></script>
+<script src="main.js"></script>
+
+
+</html>
